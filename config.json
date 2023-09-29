@@ -1,0 +1,14 @@
+{
+  "teams": [
+    {
+      "name": "team1",
+      "division": "advanced",
+      "school": "school1",
+      "password": "asdf"
+    }
+  ],
+  "timing": {
+    "contest": 60,
+    "hide_scoreboard": 30
+  }
+}
