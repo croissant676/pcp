@@ -10,5 +10,21 @@
   "timing": {
     "contest": 60,
     "hide_scoreboard": 30
+  },
+  "questions": [
+    {
+      "name": "question1",
+      "input_file": "/q1/judge.in",
+      "judge_file": "/q1/judge.out"
+    }
+  ],
+  "scripting": {
+    "script_location": "control.pcp.kts"
+  },
+  "execution": {
+    "java": {
+      "timeout": 1500,
+      "memory": 512
+    }
   }
 }

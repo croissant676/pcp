@@ -1,11 +1,8 @@
 package dev.kason.pcp
 
-import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import com.lectra.koson.ObjectType
+import com.lectra.koson.arr
+import com.lectra.koson.obj
 import io.ktor.server.websocket.*
 import io.ktor.util.*
 import io.ktor.websocket.*
@@ -13,106 +10,140 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
 
-val logger = KotlinLogging.logger {}
+@Serializable
+enum class Division {
+	@SerialName("novice")
+	Novice,
 
-class Team(
-	var name: String,
-	var division: Division,
-	var school: String,
-	var password: String? = null
-) {
+	@SerialName("advanced")
+	Advanced
+	// add more divisions as needed
+}
+
+// represents a team
+// Id to JSON serialize, Config to deserialize
+class Team private constructor(
+	val name: String,
+	val division: Division,
+	val school: String,
+	val password: String?
+) : KosonOutput() {
+	// safe version of Team without password
+	// deserialization does nothing, use Team.Config for that
 	@Serializable
-	enum class Division {
-		@SerialName("novice")
-		Novice,
+	data class Id(
+		val name: String,
+		val division: Division,
+		val school: String
+	)
 
-		@SerialName("advanced")
-		Advanced
-	}
-
-	@Serializable
-	class Id(val name: String, val division: Division, val school: String)
+	var score: Int = Contest.NotStartedScore
+		internal set
 
 	val id: Id get() = Id(name, division, school)
-	val sessions: MutableList<Session> = mutableListOf()
 
-	fun addSession(): Session {
-		val session = Session(this)
-		if (sessions.isNotEmpty()) {
-			logger.warn { "Team '$name' has multiple sessions, check legitimacy." }
+	// to get information from config, update as needed
+	@Serializable
+	data class Config(
+		val name: String,
+		val division: Division,
+		val school: String,
+		val password: String? = null,
+		val sessions: List<String> = emptyList()
+	)
+
+	// team constructor from config
+	@Deprecated("use Contest.createTeam()", ReplaceWith("Contest.createTeam(config)"))
+	internal constructor(config: Config) : this(
+		config.name,
+		config.division,
+		config.school,
+		config.password
+	) {
+		for (session in config.sessions) {
+			newSession(session, ignoreWarning = true)
+		}
+	}
+
+	fun passwordDoesNotMatch(password: String): Boolean = this.password != null && this.password != password
+
+	internal val sessions: MutableList<Session> = mutableListOf()
+
+	@Suppress("DEPRECATION")
+	fun newSession(
+		code: String = generateCode(),
+		ignoreWarning: Boolean = false // ignore if it's from a config
+	): Session {
+		val session = Session(this, code)
+		if (!ignoreWarning && sessions.isNotEmpty()) {
+			val sessionCodes = sessions.joinToString(prefix = "[", postfix = "]") { it.code }
+			logger.warn {
+				"team ${this.name} has multiple sessions: $sessionCodes, check legitimacy"
+			}
 		}
 		sessions.add(session)
-		Contest.sessions[session.code] = session
+		Contest.sessions[code] = session
 		return session
 	}
 
-	var score: Int = 0
+	val runs: MutableList<Run> = mutableListOf()
 
-	fun invalidateSessions() = sessions.forEach { it.valid = false }
-}
+	fun addRun(run: Run) {
 
-@Serializable
-class LoginInput(val username: String, val password: String)
+	}
 
-@Serializable
-class LoginResponse(val team: Team.Id, val token: String)
-
-fun Routing.addLoginRoutes() {
-	route("/api/auth") {
-		post {
-			val input = call.receive<LoginInput>()
-			val team = Contest.teams[input.username]
-			if (team == null || team.password != input.password) {
-				call.respond(HttpStatusCode.Unauthorized)
-				return@post
-			}
-			val session = team.addSession()
-			call.respond(LoginResponse(team.id, session.code))
+	suspend fun sendMessages(msg: WebSocketMessage) {
+		for (session in sessions.filter { it.isConnected }) {
+			session.sendMessage(msg)
 		}
 	}
-}
 
-@Serializable
-data class TeamScoreInformation(val team: Team.Id, val score: Int)
-
-fun Team.toTeamScoreInformation(): TeamScoreInformation {
-	return TeamScoreInformation(id, score)
-}
-
-fun Routing.addScoreRoute() {
-	get("/api/score") {
-		val teamScores = Contest.teams.values.map { it.toTeamScoreInformation() }
-			.sortedBy { it.score }
-			.reversed()
-		call.respond(teamScores)
+	override fun json(): ObjectType = obj {
+		"name" to name
+		"division" to division.name
+		"school" to school
+		"score" to score
+		"sessions" to arr[sessions.map { it.code }]
+		"runs" to arr[runs.map { it.json() }]
 	}
 }
 
-fun Routing.addWebsocketRoute() {
-	webSocket("/api/ws") {
-		val session = call.session() ?: return@webSocket
-		session.webSocketSession = this
+class Session @Deprecated("use Team.newSession()") internal constructor(
+	val team: Team,
+	val code: String
+) : KosonOutput() {
+	internal var websocket: DefaultWebSocketServerSession? = null
+	val isConnected: Boolean get() = websocket != null
+
+	var isValid: Boolean = true
+		private set
+
+	// sends the serialized wsm to the websocket
+	suspend fun sendMessage(msg: WebSocketMessage) = websocket?.sendSerialized(msg)
+		?: error("session $code is not connected, cannot send message")
+
+	// closes the websocket with the given reason
+	suspend fun terminateConnection(reason: CloseReason? = null) {
+		if (!isConnected) {
+			error("session $code is not connected, cannot invalidate")
+		}
+		isValid = false
+		websocket!!.close(reason ?: CloseReason(CloseReason.Codes.NORMAL, "session invalidated"))
+		websocket = null
 	}
-}
 
-fun ApplicationCall.session(): Session? {
-	val token = request.header("X-Team") ?: return null
-	return Contest.sessions[token]
-}
-
-data class Session(
-	val team: Team, val code: String = randomCode()
-) {
-	var webSocketSession: DefaultWebSocketSession? = null
-	val connected: Boolean get() = webSocketSession != null
-	var valid: Boolean = true
-
-	suspend fun sendInformation() {
+	override fun json(): ObjectType = obj {
+		"team" to team.name
+		"code" to code
+		"valid" to isValid
+		"connected" to isConnected
 	}
+
 }
 
-fun randomCode(): String {
-	val bytes = ByteArray(18)
-	Random.nextBytes(bytes)
-	return bytes.encodeBase64()
+// generates a code if not provided
+fun generateCode(): String {
+	val byteArray = ByteArray(18)
+	Random.Default.nextBytes(byteArray)
+	return byteArray.encodeBase64()
 }
