@@ -35,15 +35,24 @@ class Question(
 		val name: String,
 		val number: Int
 	)
+
+	fun toRepresentation(): Representation = Representation(name, number)
 }
+
 
 class Submission(
 	val session: Session,
 	val question: Question,
 	val language: Language,
 	val code: String,
-	val fileName: String
+	val fileName: String,
+	val id: Int = Contest.submissions.size
 ) {
+
+	init {
+		Contest.submissions.add(this)
+	}
+
 	val time = Contest.currentTime()
 	val team: Team get() = session.team
 
@@ -95,6 +104,7 @@ class Clarification internal constructor(
 	@Serializable
 	data class Request(
 		val question: Int,
+		@SerialName("question_text")
 		val questionText: String
 	) {
 		fun toClarification(session: Session): Clarification? {

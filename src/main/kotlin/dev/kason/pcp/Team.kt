@@ -8,6 +8,7 @@ import io.ktor.util.*
 import io.ktor.websocket.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.util.*
 import kotlin.random.Random
 
 @Serializable
@@ -76,12 +77,14 @@ class Team private constructor(
 	): Session {
 		val session = Session(this, code)
 		if (!ignoreWarning && sessions.isNotEmpty()) {
+			sessions.add(session)
 			val sessionCodes = sessions.joinToString(prefix = "[", postfix = "]") { it.code }
 			logger.warn {
-				"team ${this.name} has multiple sessions: $sessionCodes, check legitimacy"
+				"team ${this.name} has multiple sessions (${sessions.size}): $sessionCodes, check legitimacy"
 			}
+		} else {
+			sessions.add(session)
 		}
-		sessions.add(session)
 		Contest.sessions[code] = session
 		return session
 	}
@@ -141,9 +144,11 @@ class Session @Deprecated("use Team.newSession()") internal constructor(
 
 }
 
+val base64Encoder: Base64.Encoder = Base64.getUrlEncoder()
+
 // generates a code if not provided
 fun generateCode(): String {
 	val byteArray = ByteArray(18)
 	Random.Default.nextBytes(byteArray)
-	return byteArray.encodeBase64()
+	return base64Encoder.encodeToString(byteArray)
 }

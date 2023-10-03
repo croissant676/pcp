@@ -7,7 +7,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.hours
 
 // login
 
@@ -67,6 +70,8 @@ fun Routing.addWebsocketRoute() {
 			return@webSocket
 		}
 		session.websocket = this
+		logger.info { "session $token linked to websocket!" }
+		delay(15.hours)
 	}
 }
 
@@ -76,7 +81,7 @@ data class TeamScoreRepresentation(
 	val score: Int
 )
 
-fun Routing.generalRouting() {
+fun Routing.addGeneralRouting() {
 	// scoreboard
 	get("/api/score") {
 		val teams = Contest.teams.values
@@ -109,7 +114,7 @@ fun Routing.generalRouting() {
 			call.respond(HttpStatusCode.BadRequest)
 			return@post
 		}
-		call.respond(HttpStatusCode.OK) // todo
+		call.respond(HttpStatusCode.OK, submissionObj.id)
 	}
 	post("/api/clarifications") {
 		val session = call.session()
@@ -141,4 +146,24 @@ fun Routing.generalRouting() {
 	get("/api/time") {
 		call.respond(Contest.currentTime())
 	}
+	get("/api/contest_start") {
+		if (!Contest.hasStarted) {
+			call.respond(HttpStatusCode.TooEarly)
+			return@get
+		}
+		call.respond(Contest.contestStart)
+	}
+	get("/api/logout") {
+		val session = call.session()
+			?: return@get call.respond(HttpStatusCode.Unauthorized)
+		session.terminateConnection()
+		call.respond(HttpStatusCode.OK)
+	}
 }
+
+@Serializable
+@SerialName("announcement")
+data class Announcement(
+	val title: String,
+	val body: String
+): WebSocketMessage

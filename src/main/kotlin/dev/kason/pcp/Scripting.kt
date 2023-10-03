@@ -72,9 +72,6 @@ suspend fun pcpScriptListener() {
 }
 
 abstract class KosonOutput {
-
 	abstract fun json(): ObjectType
-
 	override fun toString(): String = json().pretty(spaces = 4)
-
 }

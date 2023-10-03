@@ -2,13 +2,17 @@ package dev.kason.pcp
 
 import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.callloging.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
@@ -19,32 +23,34 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.slf4j.event.*
 import java.io.File
 import java.time.Duration
 import java.util.*
 
 val logger: KLogger = KotlinLogging.logger("dev.kason.pcp.Contest")
 
-object Contest: CoroutineScope by CoroutineScope(Dispatchers.Default) {
+object Contest : CoroutineScope by CoroutineScope(Dispatchers.Default) {
 
 	const val NotStartedScore = -1
 	const val NotStartedTime = 0L
-
 	const val DefaultDuration = 3 * 60 * 60 // 3 hours
-	const val DefaultHideScoreboard = 30 * 60 // 30 minutes
 
+	const val DefaultHideScoreboard = 30 * 60 // 30 minutes
 	const val UnansweredClarification = "no answer yet."
 
 	val teams: MutableMap<String, Team> = mutableMapOf()
-	val sessions: MutableMap<String, Session> = mutableMapOf()
 
+	val sessions: MutableMap<String, Session> = mutableMapOf()
 	var startTime: Long = NotStartedTime
 		private set
 
 	val hasStarted: Boolean get() = startTime != NotStartedTime
 
 	val config = Config.read(File("config.json"))
+
 	val clarifications: MutableList<Clarification> = mutableListOf()
+	val submissions: MutableList<Submission> = mutableListOf()
 
 	fun module(application: Application) {
 		application.apply {
@@ -52,6 +58,7 @@ object Contest: CoroutineScope by CoroutineScope(Dispatchers.Default) {
 			routing {
 				addLoginRouting()
 				addWebsocketRoute()
+				addGeneralRouting()
 			}
 		}
 		for (teamConfig in config.teams) {
@@ -83,6 +90,21 @@ object Contest: CoroutineScope by CoroutineScope(Dispatchers.Default) {
 				react("frontend/build")
 			}
 		}
+		install(CORS) {
+			anyHost()
+			allowHeaders { true }
+			HttpMethod.DefaultMethods.forEach { allowMethod(it) }
+			allowNonSimpleContentTypes = true
+			allowCredentials = true
+			allowSameOrigin = true
+			exposeHeader(HttpHeaders.AccessControlAllowOrigin)
+		}
+		install(CallLogging) {
+			level = Level.INFO
+			this.format {
+				"${it.response.status()} ${it.request.httpMethod.value} ${it.request.path()}"
+			}
+		}
 	}
 
 	@Suppress("DEPRECATION")
@@ -91,12 +113,23 @@ object Contest: CoroutineScope by CoroutineScope(Dispatchers.Default) {
 		teams[team.name] = team
 	}
 
-	fun start() {
+	lateinit var contestStart: ContestStart
+		private set
+
+	suspend fun start() {
 		startTime = System.currentTimeMillis()
 		logger.info { "starting contest @ $startTime" }
 		for (team in teams.values) {
 			team.score = 0 // reset score
 		}
+		contestStart = contestStart()
+		sendEverybody(contestStart)
+	}
+
+	fun contestStart(): ContestStart {
+		val start = startTime
+		val end = start + (config.timing.contest * 1000)
+		return ContestStart(start, end, questions.map { it.toRepresentation() })
 	}
 
 	// returns whether the session was invalidated
@@ -132,6 +165,7 @@ object Contest: CoroutineScope by CoroutineScope(Dispatchers.Default) {
 	suspend fun sendEverybody(message: WebSocketMessage) {
 		for (session in sessions.values.filter { it.isConnected }) {
 			session.sendMessage(message)
+			logger.info { "sent $message to ${session.code}" }
 		}
 	}
 }
@@ -170,7 +204,6 @@ data class Config(
 		fun read(file: File): Config = read(file.readText())
 	}
 }
-
 
 
 fun main() {

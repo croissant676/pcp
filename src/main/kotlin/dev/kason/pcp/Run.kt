@@ -9,11 +9,12 @@ import kotlinx.serialization.Serializable
 enum class Language {
 	@SerialName("java")
 	Java,
+
 	@SerialName("python3")
 	Python3
 }
 
-class Run (val submission: Submission): KosonOutput() {
+class Run(val submission: Submission) : KosonOutput() {
 
 	var status: Status = Status.Pending
 		private set
@@ -44,6 +45,7 @@ class Run (val submission: Submission): KosonOutput() {
 
 		@SerialName("pending")
 		Pending,
+
 		@SerialName("invalid")
 		Invalid;
 	}
@@ -67,3 +69,12 @@ data class ContestTime(
 ) : Comparable<ContestTime> {
 	override fun compareTo(other: ContestTime): Int = timestamp.compareTo(other.timestamp)
 }
+
+@Serializable
+@SerialName("contest_start")
+data class ContestStart(
+	// take from contest
+	val start: Long,
+	val end: Long,
+	val questions: List<Question.Representation>
+): WebSocketMessage

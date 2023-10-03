@@ -8,8 +8,8 @@
     }
   ],
   "timing": {
-    "contest": 60,
-    "hide_scoreboard": 30
+    "contest": 3600,
+    "hide_scoreboard": 1800
   },
   "questions": [
     {
