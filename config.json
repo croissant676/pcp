@@ -26,5 +26,9 @@
       "timeout": 1500,
       "memory": 512
     }
+  },
+  "jex": {
+    "host": "nothing",
+    "port": 12213
   }
 }

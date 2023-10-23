@@ -95,7 +95,7 @@ class Team private constructor(
 
 	}
 
-	suspend fun sendMessages(msg: WebSocketMessage) {
+	suspend fun sendMessage(msg: WebSocketMessage) {
 		for (session in sessions.filter { it.isConnected }) {
 			session.sendMessage(msg)
 		}

@@ -31,6 +31,7 @@ dependencies {
 	implementation("io.ktor:ktor-server-cors")
 	implementation("ch.qos.logback:logback-classic:$logback_version")
 	implementation("io.ktor:ktor-server-call-logging")
+	implementation("io.ktor:ktor-network")
 	implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
 	implementation("io.ktor:ktor-server-sessions-jvm:2.3.4")
 	implementation("com.varabyte.kotter:kotter-jvm:1.1.1")

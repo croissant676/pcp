@@ -167,3 +167,18 @@ data class Announcement(
 	val title: String,
 	val body: String
 ): WebSocketMessage
+
+suspend fun Session.sendMessage(text:String, title: String = Contest.DefaultAnnouncementTitle) {
+	val announcement = Announcement(title, text)
+	sendMessage(announcement)
+}
+
+suspend fun Team.sendMessage(text: String, title: String = Contest.DefaultAnnouncementTitle) {
+	val announcement = Announcement(title, text)
+	sendMessage(announcement)
+}
+
+suspend fun Contest.sendEverybody(text: String, title: String = DefaultAnnouncementTitle) {
+	val announcement = Announcement(title, text)
+	sendEverybody(announcement)
+}

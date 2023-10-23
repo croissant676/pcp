@@ -39,6 +39,8 @@ object Contest : CoroutineScope by CoroutineScope(Dispatchers.Default) {
 	const val DefaultHideScoreboard = 30 * 60 // 30 minutes
 	const val UnansweredClarification = "no answer yet."
 
+	const val DefaultAnnouncementTitle = "Announcement"
+
 	val teams: MutableMap<String, Team> = mutableMapOf()
 
 	val sessions: MutableMap<String, Session> = mutableMapOf()
@@ -176,6 +178,7 @@ data class Config(
 	val timing: Timing,
 	val questions: List<Question.Config>,
 	val scripting: Scripting,
+	val jex: Jex
 ) {
 	@Serializable
 	data class Timing(
@@ -191,6 +194,12 @@ data class Config(
 		val period: Int = 1,
 		@SerialName("script_location")
 		val scriptLocation: String = "control.pcp.kts"
+	)
+
+	@Serializable
+	data class Jex(
+		val host: String,
+		val port: Int
 	)
 
 	companion object {
